@@ -1,36 +1,38 @@
 import streamlit as st
 import pandas as pd
 import io
+from openpyxl.worksheet.datavalidation import DataValidation
 
 # Pengaturan tampilan halaman
 st.set_page_config(page_title="Kalkulator Harga E-Commerce Pro", layout="wide")
 
-st.title("🛒 Kalkulator Harga Jual E-Commerce (Fitur Excel)")
-st.write("Hitung harga jual ideal secara satuan atau masal (Bulk) agar terhindar dari kerugian biaya admin.")
+st.title("🛒 Kalkulator Harga Jual E-Commerce (Dropdown Excel)")
+st.write("Hitung harga jual ideal secara satuan atau masal menggunakan template Excel yang sudah dilengkapi fitur Dropdown Otomatis.")
 
 # =====================================================================
-# AREA UPDATE DATA BIAYA ADMIN & KOMISI (Update 2026)
+# AREA UPDATE DATA BIAYA ADMIN & KOMISI (Update Terbaru 2026)
+# Kategori disamakan fungsinya agar dropdown Excel sinkron & rapi
 # =====================================================================
 FEE_DATA = {
     "Shopee": {
         "Fashion & Pakaian": {"fee": 0.10, "flat": 1250},
-        "Kecantikan & Perawatan (termasuk Parfum)": {"fee": 0.0675, "flat": 1250},
-        "Otomotif & Aksesoris Kendaraan": {"fee": 0.09, "flat": 1250},
-        "Elektronik & Gadget Umum": {"fee": 0.095, "flat": 1250},
-        "Elektronik High-End (HP, Laptop)": {"fee": 0.0525, "flat": 1250},
-        "Makanan & Minuman (FMCG)": {"fee": 0.065, "flat": 1250}
+        "Kecantikan & Perawatan (Parfum)": {"fee": 0.0675, "flat": 1250},
+        "Otomotif & Aksesoris": {"fee": 0.09, "flat": 1250},
+        "Elektronik & Gadget": {"fee": 0.095, "flat": 1250},
+        "Makanan & Minuman": {"fee": 0.065, "flat": 1250},
+        "Peralatan Rumah Tangga": {"fee": 0.06, "flat": 1250}
     },
     "Tokopedia & TikTok Shop": {
-        "Fashion (Pakaian, Sepatu, Tas)": {"fee": 0.08, "flat": 0},
-        "Kecantikan & Perawatan Pribadi": {"fee": 0.07, "flat": 0},
-        "Otomotif & Motor": {"fee": 0.075, "flat": 0},
+        "Fashion & Pakaian": {"fee": 0.08, "flat": 0},
+        "Kecantikan & Perawatan (Parfum)": {"fee": 0.07, "flat": 0},
+        "Otomotif & Aksesoris": {"fee": 0.075, "flat": 0},
+        "Elektronik & Gadget": {"fee": 0.03, "flat": 0},
         "Makanan & Minuman": {"fee": 0.065, "flat": 0},
-        "Peralatan Rumah & Dapur": {"fee": 0.08, "flat": 0},
-        "HP & Elektronik": {"fee": 0.03, "flat": 0}
+        "Peralatan Rumah Tangga": {"fee": 0.08, "flat": 0}
     }
 }
 
-# Fungsi inti kalkulasi harga jual agar konsisten di satuan maupun bulk
+# Fungsi inti kalkulasi harga jual
 def hitung_harga_jual_item(hpp, target_untung, biaya_lain, platform, kategori, is_po=False):
     if platform not in FEE_DATA or kategori not in FEE_DATA[platform]:
         return 0, 0
@@ -39,18 +41,17 @@ def hitung_harga_jual_item(hpp, target_untung, biaya_lain, platform, kategori, i
     biaya_tetap = FEE_DATA[platform][kategori]["flat"]
     
     if platform == "Shopee" and is_po:
-        persen_admin += 0.03 # Tambahan komisi pre-order Shopee
+        persen_admin += 0.03 # Tambahan komisi pre-order Shopee 2026
         
     total_beban_dasar = hpp + target_untung + biaya_lain + biaya_tetap
     
     if persen_admin >= 1:
         return 0, 0
     
-    # Rumus utama anti-rugi
     harga_jual = total_beban_dasar / (1 - persen_admin)
     potongan_persen = harga_jual * persen_admin
     
-    # Aturan batas komisi maksimal Rp 650.000 (Tokopedia & TikTok Shop)
+    # Aturan batas komisi maksimal Rp 650.000 (Tokopedia & TikTok Shop 2026)
     if platform == "Tokopedia & TikTok Shop" and potongan_persen > 650000:
         potongan_persen = 650000
         harga_jual = hpp + target_untung + biaya_lain + biaya_tetap + potongan_persen
@@ -103,48 +104,73 @@ if menu == "Kalkulator Satuan":
             st.write(f"💸 Estimasi Potongan Marketplace: **Rp {potongan:,}**")
 
 # ---------------------------------------------------------------------
-# MODE 2: UPLOAD MASAL VIA EXCEL
+# MODE 2: UPLOAD MASAL VIA EXCEL (DENGAN DROPDOWN OTOMATIS)
 # ---------------------------------------------------------------------
 elif menu == "Upload Masal (Bulk Excel)":
     st.header("📂 Perhitungan Banyak Produk Sekaligus (Bulk Upload)")
-    st.write("Ikuti langkah di bawah ini untuk menghitung puluhan produk sekaligus menggunakan file Excel.")
+    st.write("Unduh template di bawah, isi menggunakan menu pilihan (dropdown) yang tersedia di Excel, lalu upload kembali.")
     
-    # LANGKAH 1: DOWNLOAD TEMPLATE
-    st.subheader("Langkah 1: Download Template")
-    st.write("Gunakan template standar di bawah ini agar sistem tidak error membaca data Anda.")
+    st.subheader("Langkah 1: Download Template Ber-Dropdown")
     
-    # Data contoh untuk isi template
+    # 1. Membuat DataFrame Kosong/Contoh untuk Template
     template_df = pd.DataFrame({
-        "Nama Produk": ["Kemeja Flanel X", "Parfum Scent Y"],
-        "HPP": [85000, 45000],
-        "Target Untung Bersih": [30000, 25000],
-        "Biaya Packing & Lainnya": [2000, 1500],
+        "Nama Produk": ["Produk Contoh A", "Produk Contoh B"],
+        "HPP": [100000, 75000],
+        "Target Untung Bersih": [25000, 20000],
+        "Biaya Packing & Lainnya": [2000, 2000],
         "Platform": ["Shopee", "Tokopedia & TikTok Shop"],
-        "Kategori": ["Fashion & Pakaian", "Kecantikan & Perawatan (termasuk Parfum)"],
+        "Kategori": ["Fashion & Pakaian", "Kecantikan & Perawatan (Parfum)"],
         "PreOrder Shopee (Ya/Tidak)": ["Tidak", "Tidak"]
     })
     
-    # Tampilkan panduan penulisan teks kategori yang valid agar user tidak salah ketik
-    with st.expander("Lihat Daftar Nama Platform & Kategori yang Valid"):
-        col_info1, col_info2 = st.columns(2)
-        with col_info1:
-            st.markdown("**Opsi untuk Platform 'Shopee':**")
-            for k in FEE_DATA["Shopee"].keys():
-                st.code(k)
-        with col_info2:
-            st.markdown("**Opsi untuk Platform 'Tokopedia & TikTok Shop':**")
-            for k in FEE_DATA["Tokopedia & TikTok Shop"].keys():
-                st.code(k)
-
-    # Proses konversi dataframe contoh ke Excel di memori
+    # 2. Proses pembuatan file Excel + Menyisipkan Fitur Dropdown
     buffer_template = io.BytesIO()
     with pd.ExcelWriter(buffer_template, engine='openpyxl') as writer:
         template_df.to_excel(writer, index=False, sheet_name="Template_Kalkulator")
-    
+        
+        # Ambil workbook dan worksheet openpyxl yang sedang aktif
+        workbook = writer.book
+        worksheet = writer.sheets["Template_Kalkulator"]
+        
+        # A. Buat Dropdown untuk PLATFORM (Kolom E)
+        pilihan_platform = f'"{",".join(list(FEE_DATA.keys()))}"'
+        dv_platform = DataValidation(type="list", formula1=pilihan_platform, allow_blank=True)
+        dv_platform.error ='Pilihan tidak ada dalam daftar!'
+        dv_platform.errorTitle = 'Pilihan Salah'
+        dv_platform.prompt = 'Silakan pilih Platform'
+        dv_platform.promptTitle = 'Platform'
+        worksheet.add_data_validation(dv_platform)
+        dv_platform.add("E2:E200") # Berlaku dari baris 2 sampai 200
+        
+        # B. Buat Dropdown untuk KATEGORI (Kolom F)
+        # Mengambil daftar kategori unik dari struktur data
+        daftar_kategori = list(FEE_DATA["Shopee"].keys())
+        pilihan_kategori = f'"{",".join(daftar_kategori)}"'
+        dv_kategori = DataValidation(type="list", formula1=pilihan_kategori, allow_blank=True)
+        dv_kategori.error ='Kategori tidak ditemukan!'
+        dv_kategori.errorTitle = 'Kategori Salah'
+        dv_kategori.prompt = 'Silakan pilih Kategori Produk'
+        dv_kategori.promptTitle = 'Kategori'
+        worksheet.add_data_validation(dv_kategori)
+        dv_kategori.add("F2:F200") # Berlaku dari baris 2 sampai 200
+        
+        # C. Buat Dropdown untuk PREORDER (Kolom G)
+        dv_po = DataValidation(type="list", formula1='"Ya,Tidak"', allow_blank=True)
+        dv_po.prompt = 'Apakah produk ini Pre-Order?'
+        dv_po.promptTitle = 'Sistem PO'
+        worksheet.add_data_validation(dv_po)
+        dv_po.add("G2:G200")
+        
+        # Atur lebar kolom agar rapi saat dibuka di Excel
+        for col in worksheet.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = col[0].column_letter
+            worksheet.column_dimensions[col_letter].width = max(max_len + 3, 12)
+
     st.download_button(
-        label="📥 Download Template Excel Kosong",
+        label="📥 Download Template Excel (Ada Dropdown)",
         data=buffer_template.getvalue(),
-        file_name="template_kalkulator_masal.xlsx",
+        file_name="template_kalkulator_dropdown.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     
@@ -152,22 +178,20 @@ elif menu == "Upload Masal (Bulk Excel)":
     
     # LANGKAH 2: UPLOAD & PROSES DATA
     st.subheader("Langkah 2: Upload File yang Sudah Diisi")
-    uploaded_file = st.file_uploader("Pilih file Excel (.xlsx) Anda:", type=["xlsx"])
+    uploaded_file = st.file_uploader("Pilih file Excel yang sudah diisi:", type=["xlsx"])
     
     if uploaded_file is not None:
         try:
-            # Membaca excel yang diupload
             df = pd.read_excel(uploaded_file)
             
-            # Cek kecocokan kolom utama
+            # Validasi struktur kolom
             required_cols = ["Nama Produk", "HPP", "Target Untung Bersih", "Biaya Packing & Lainnya", "Platform", "Kategori", "PreOrder Shopee (Ya/Tidak)"]
             if not all(col in df.columns for col in required_cols):
-                st.error("Gagal membaca file! Pastikan nama kolom di file Anda sama persis dengan yang ada di template.")
+                st.error("Struktur file salah! Gunakan kolom asli dari template yang diunduh di atas.")
             else:
                 list_harga_jual = []
                 list_potongan = []
                 
-                # Looping baris demi baris untuk dihitung harganya
                 for idx, row in df.iterrows():
                     is_po_bool = True if str(row["PreOrder Shopee (Ya/Tidak)"]).strip().lower() == "ya" else False
                     
@@ -182,12 +206,12 @@ elif menu == "Upload Masal (Bulk Excel)":
                     list_harga_jual.append(harga_jual)
                     list_potongan.append(potongan)
                 
-                # Menyisipkan hasil kalkulasi ke kolom baru di data asli
+                # Input data hasil kalkulasi ke dataframe
                 df["Harga Jual Disarankan (Rp)"] = list_harga_jual
                 df["Potongan Admin Platform (Rp)"] = list_potongan
-                df["Omset Kotor Per Produk (Rp)"] = df["Harga Jual Disarankan (Rp)"]
+                df["Estimasi Pendapatan Kotor (Rp)"] = df["Harga Jual Disarankan (Rp)"]
                 
-                st.success("🎉 Sukses! Seluruh data produk Anda berhasil dihitung.")
+                st.success("🎉 Seluruh data berhasil dihitung otomatis tanpa typo!")
                 st.dataframe(df, use_container_width=True)
                 
                 # LANGKAH 3: DOWNLOAD HASIL JADI
@@ -200,11 +224,11 @@ elif menu == "Upload Masal (Bulk Excel)":
                 st.download_button(
                     label="📥 Download Hasil Perhitungan (Excel)",
                     data=buffer_result.getvalue(),
-                    file_name="hasil_kalkulasi_harga_jual.xlsx",
+                    file_name="hasil_kalkulasi_toko.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     type="primary",
                     use_container_width=True
                 )
                 
         except Exception as e:
-            st.error(f"Terjadi error teknis saat membaca file Anda: {e}")
+            st.error(f"Terjadi kesalahan membaca file. Pastikan data angka terisi dengan benar. Error: {e}")
